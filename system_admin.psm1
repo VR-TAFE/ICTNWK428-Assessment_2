@@ -14,8 +14,6 @@ Virtual Machines:
     ip address: 192.168.1.102 255.255.255.0
     NIC: VMnet1 (Host-Only)
 
-* note: Both VMs Firewalls are disabled *
-
 VMware network setting configured:
     Network Type: Host-Only VMnet1
     Subnet IP address: 192.168.1.0
@@ -23,7 +21,76 @@ VMware network setting configured:
 =========================================================================== 
 #>
 
+# Establish Network 
+
 # Task 1 – Logging Function and Test Function
+
+function Test-ServerConnection {
+
+    param(
+        [string]$ComputerName = "Server1"
+    )
+
+    $LogFolder = "C:\myLogs"
+    $LogFile = "$LogFolder\logs.txt"
+
+    try {
+
+        # Create log folder if it doesn't exist
+        if (!(Test-Path $LogFolder)) {
+
+            New-Item `
+                -Path $LogFolder `
+                -ItemType Directory `
+                -Force | Out-Null
+        }
+
+        # Create log file if it doesn't exist
+        if (!(Test-Path $LogFile)) {
+
+            New-Item `
+                -Path $LogFile `
+                -ItemType File `
+                -Force | Out-Null
+        }
+
+        # Test connectivity
+        if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet) {
+
+            $LogEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Connection Successful"
+
+            Add-Content `
+                -Path $LogFile `
+                -Value $LogEntry
+
+            Write-Host $LogEntry
+        }
+        else {
+
+            $LogEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Connection Failed"
+
+            Add-Content `
+                -Path $LogFile `
+                -Value $LogEntry
+
+            Write-Host $LogEntry
+        }
+    }
+    catch {
+
+        $LogEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Error: $($_.Exception.Message)"
+
+        Add-Content `
+            -Path $LogFile `
+            -Value $LogEntry
+
+        Write-Error $_.Exception.Message
+    }
+}
+
+
+
+
 
 # Task 2 – Promote Server to Domain Controller
 
