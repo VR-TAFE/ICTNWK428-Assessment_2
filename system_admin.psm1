@@ -21,10 +21,9 @@ VMware network setting configured:
 =========================================================================== 
 #>
 
-# Establish Network 
-
+#==================================================================================================
 # Task 1 – Logging Function and Test Function
-
+#==================================================================================================
 function Test-ServerConnection {
 
     param(
@@ -88,11 +87,70 @@ function Test-ServerConnection {
     }
 }
 
-
-
-
-
+#==================================================================================================
 # Task 2 – Promote Server to Domain Controller
+#==================================================================================================
+
+function Install-MicksAndMacksAD {
+
+    param(
+        [string]$DomainName = "VRmicksandmacks.local"
+    )
+
+    try {
+
+        # Create log folder if required
+        if (!(Test-Path "C:\myLogs")) {
+
+            New-Item `
+                -Path "C:\myLogs" `
+                -ItemType Directory `
+                -Force | Out-Null
+        }
+
+        # Install AD DS Role if not already installed
+        $ADDSRole = Get-WindowsFeature `
+            -Name AD-Domain-Services
+
+        if (-not $ADDSRole.Installed) {
+
+            Install-WindowsFeature `
+                -Name AD-Domain-Services `
+                -IncludeManagementTools
+
+            Add-Content `
+                -Path "C:\myLogs\logs.txt" `
+                -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Installed Active Directory Domain Services"
+        }
+
+        # Prompt for DSRM Password
+        $DSRMPassword = Read-Host `
+            "Enter DSRM Password" `
+            -AsSecureString
+
+        # Promote Server to Domain Controller
+        Install-ADDSForest `
+            -DomainName $DomainName `
+            -SafeModeAdministratorPassword $DSRMPassword `
+            -InstallDNS `
+            -Force
+
+        Add-Content `
+            -Path "C:\myLogs\logs.txt" `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Promoted Server to Domain Controller ($DomainName)"
+    }
+
+    catch {
+
+        Add-Content `
+            -Path "C:\myLogs\logs.txt" `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - ERROR: $($_.Exception.Message)"
+
+        Write-Error $_.Exception.Message
+    }
+}
+
+
 
 # Task 3 – Connect to Domain Computer
 
