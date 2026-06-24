@@ -1,0 +1,4 @@
+FirstName,LastName,UserLogonName,Password,PasswordNeverExpires
+John,Smith,john.smith@VRmicksandmacks.local,Password1,True
+Jane,Doe,jane.doe@VRmicksandmacks.local,Password1,True
+Bob,Jones,bob.jones@VRmicksandmacks.local,Password1,False

@@ -385,6 +385,40 @@ function New-NewUsersOU {
     }
 }
 
+<#
+
+# Create the Destination Folder on Server1 directory "C:\Import"
+Invoke-Command `
+    -Session $Session `
+    -ScriptBlock {
+
+        if (!(Test-Path "C:\Import")) {
+
+            New-Item `
+                -Path "C:\Import" `
+                -ItemType Directory `
+                -Force
+        }
+    }
+
+# Copy "Users.csv" to Server1 directory "C:\Import"
+Copy-Item `
+    -Path "C:\Import\Users.csv" `
+    -Destination "C:\Import\Users.csv" `
+    -ToSession $Session `
+    -Force
+
+# Verify the File Exists on Server1 directory "C:\Import"
+Invoke-Command `
+    -Session $Session `
+    -ScriptBlock {
+
+        Get-Item `
+            "C:\Import\Users.csv"
+    }
+
+#>
+
 # Function: Import-NewUsers
 # Purpose: Imports user accounts from a CSV file and creates them in the "New_Users" Organizational Unit within Active Directory.
 
@@ -675,9 +709,234 @@ function Get-TopTenSystemErrors {
 # Task 8 – Schedule Disk Cleanup
 #================================================================================================== 
 
+# Function: Register-DiskCleanupTask
+# Purpose: Creates and registers a scheduled task that runs Disk Cleanup every day at 6:00 AM.
+# The function can operate on either the local computer or a remote computer specified by the user.
+# All activity is recorded in a log file.
 
+function Register-DiskCleanupTask {
 
+    # Enable advanced PowerShell function features
+    [CmdletBinding()]
+    param(
+
+        # Specify the target computer.
+        # If no computer name is supplied, localhost is used.
+        [string]$ComputerName = "localhost"
+    )
+
+    # Define the log folder and log file locations
+    $LogFolder = "C:\MyLogs"
+    $LogFile   = "$LogFolder\logs.txt"
+
+    try {
+
+        # Check whether the task should be created locally
+        if ($ComputerName -eq "localhost") {
+
+            # Create the log directory if it does not exist
+            if (!(Test-Path $LogFolder)) {
+
+                New-Item `
+                    -Path $LogFolder `
+                    -ItemType Directory `
+                    -Force | Out-Null
+            }
+
+            # Define the action that the scheduled task will perform
+            # In this case, it runs the Windows Disk Cleanup utility
+            $Action = New-ScheduledTaskAction `
+                -Execute "cleanmgr.exe"
+
+            # Create a trigger that runs every day at 6:00 AM
+            $Trigger = New-ScheduledTaskTrigger `
+                -Daily `
+                -At 6:00AM
+
+            # Register the scheduled task with Windows Task Scheduler
+            Register-ScheduledTask `
+                -TaskName "DailyDiskCleanup" `
+                -Action $Action `
+                -Trigger $Trigger `
+                -RunLevel Highest `
+                -Force
+
+            # Record the successful task creation in the log file
+            Add-Content `
+                -Path $LogFile `
+                -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Registered DailyDiskCleanup task on localhost"
+
+            # Display a success message
+            Write-Host "Disk Cleanup task registered successfully on localhost."
+        }
+        else {
+
+            # Use PowerShell Remoting to create the task
+            # on a remote computer
+            Invoke-Command `
+                -ComputerName $ComputerName `
+                -ScriptBlock {
+
+                    # Define log locations on the remote computer
+                    $LogFolder = "C:\MyLogs"
+                    $LogFile   = "$LogFolder\logs.txt"
+
+                    # Create the log directory if required
+                    if (!(Test-Path $LogFolder)) {
+
+                        New-Item `
+                            -Path $LogFolder `
+                            -ItemType Directory `
+                            -Force | Out-Null
+                    }
+
+                    # Create the Disk Cleanup task action
+                    $Action = New-ScheduledTaskAction `
+                        -Execute "cleanmgr.exe"
+
+                    # Create a daily trigger for 6:00 AM
+                    $Trigger = New-ScheduledTaskTrigger `
+                        -Daily `
+                        -At 6:00AM
+
+                    # Register the scheduled task
+                    Register-ScheduledTask `
+                        -TaskName "DailyDiskCleanup" `
+                        -Action $Action `
+                        -Trigger $Trigger `
+                        -RunLevel Highest `
+                        -Force
+
+                    # Record the successful task creation
+                    # in the remote computer's log file
+                    Add-Content `
+                        -Path $LogFile `
+                        -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Registered DailyDiskCleanup task"
+
+                }
+
+            # Display a success message for the remote computer
+            Write-Host "Disk Cleanup task registered successfully on $ComputerName."
+        }
+    }
+    catch {
+
+        # Record any errors that occur during task creation
+        Add-Content `
+            -Path $LogFile `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - ERROR registering DailyDiskCleanup task on $ComputerName"
+
+        # Display the error message
+        Write-Error $_.Exception.Message
+    }
+}
+
+<#
+#Check the Trigger
+(Get-ScheduledTask `
+    -TaskName "DailyDiskCleanup").Triggers
+#>
 
 #==================================================================================================
 # Task 9 – Drive Mapping Script
 #================================================================================================== 
+
+# Function: New-SharedDriveGPO
+# Purpose: Creates a Group Policy Object (GPO) that will be used to map the shared folder \\SERVER1\mickandmacks_share as drive S: for domain users.
+
+function New-SharedDriveGPO {
+
+    [CmdletBinding()]
+    param()
+
+    # Define log locations
+    $LogFolder = "C:\MyLogs"
+    $LogFile   = "$LogFolder\logs.txt"
+
+    # Define GPO settings
+    $GPOName = "GPO_MapSharedDrive"
+
+    try {
+
+        # Load required modules
+        Import-Module GroupPolicy -ErrorAction Stop
+        Import-Module ActiveDirectory -ErrorAction Stop
+
+        # Create log folder if required
+        if (!(Test-Path $LogFolder)) {
+
+            New-Item `
+                -Path $LogFolder `
+                -ItemType Directory `
+                -Force | Out-Null
+        }
+
+        # Create log file if required
+        if (!(Test-Path $LogFile)) {
+
+            New-Item `
+                -Path $LogFile `
+                -ItemType File `
+                -Force | Out-Null
+        }
+
+        # Check whether the GPO already exists
+        $ExistingGPO = Get-GPO `
+            -Name $GPOName `
+            -ErrorAction SilentlyContinue
+
+        if (-not $ExistingGPO) {
+
+            # Create the GPO
+            New-GPO `
+                -Name $GPOName
+
+            Add-Content `
+                -Path $LogFile `
+                -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Created GPO '$GPOName'"
+        }
+        else {
+
+            Add-Content `
+                -Path $LogFile `
+                -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - GPO '$GPOName' already exists"
+        }
+
+        # Get domain distinguished name
+        $DomainDN = (Get-ADDomain).DistinguishedName
+
+        # Link the GPO to the New_Users OU
+        New-GPLink `
+            -Name $GPOName `
+            -Target "OU=New_Users,$DomainDN" `
+            -LinkEnabled Yes `
+            -ErrorAction SilentlyContinue
+
+        Add-Content `
+            -Path $LogFile `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - Linked GPO '$GPOName' to New_Users OU"
+
+        Write-Host ""
+        Write-Host "GPO Created Successfully"
+        Write-Host "GPO Name: $GPOName"
+        Write-Host ""
+        Write-Host "Next Step:"
+        Write-Host "Open Group Policy Management and configure:"
+        Write-Host "User Configuration"
+        Write-Host " -> Preferences"
+        Write-Host " -> Windows Settings"
+        Write-Host " -> Drive Maps"
+        Write-Host ""
+        Write-Host "Drive Letter : S:"
+        Write-Host "Location     : \\SERVER1\mickandmacks_share"
+    }
+
+    catch {
+
+        Add-Content `
+            -Path $LogFile `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - ERROR creating Shared Drive GPO : $($_.Exception.Message)"
+
+        Write-Error $_.Exception.Message
+    }
+}
